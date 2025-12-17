@@ -1,0 +1,557 @@
+{
+  "specification_version": "1.0.0",
+  "author": "R. A. Carucci",
+  "generated_at": "2025-12-17T19:30:00Z",
+  "description": "Complete ETL transformation specification for CAD/RMS unified pipeline",
+  
+  "stages": [
+    {
+      "stage_id": 1,
+      "stage_name": "ingest",
+      "description": "Load raw CAD and RMS exports into memory",
+      "operations": [
+        {
+          "operation_id": "1.1",
+          "name": "load_cad_export",
+          "function": "pd.read_excel",
+          "inputs": ["cad_export_path"],
+          "outputs": ["cad_raw_df"],
+          "parameters": {
+            "engine": "openpyxl",
+            "dtype": "object"
+          },
+          "error_handling": "Log error and raise exception if file not found"
+        },
+        {
+          "operation_id": "1.2",
+          "name": "load_rms_export",
+          "function": "pd.read_excel",
+          "inputs": ["rms_export_path"],
+          "outputs": ["rms_raw_df"],
+          "parameters": {
+            "engine": "openpyxl",
+            "dtype": "object"
+          },
+          "error_handling": "Log error and raise exception if file not found"
+        },
+        {
+          "operation_id": "1.3",
+          "name": "validate_schema",
+          "function": "validate_expected_columns",
+          "inputs": ["cad_raw_df", "rms_raw_df"],
+          "outputs": ["validation_report"],
+          "parameters": {
+            "expected_cad_cols": ["ReportNumberNew", "Incident", "FullAddress2", "TimeOfCall"],
+            "expected_rms_cols": ["CaseNumber", "Location", "IncidentType1"]
+          },
+          "error_handling": "Log warning for missing columns; continue with available fields"
+        }
+      ],
+      "success_criteria": "Both files loaded successfully with >0 records",
+      "rollback_action": "None (cannot rollback file load)"
+    },
+    
+    {
+      "stage_id": 2,
+      "stage_name": "normalize",
+      "description": "Standardize field names, types, and basic formatting",
+      "operations": [
+        {
+          "operation_id": "2.1",
+          "name": "rename_fields",
+          "function": "apply_field_name_mapping",
+          "inputs": ["cad_raw_df", "rms_raw_df"],
+          "outputs": ["cad_normalized_df", "rms_normalized_df"],
+          "parameters": {
+            "cad_field_map": "cad_field_map.json",
+            "rms_field_map": "rms_field_map.json"
+          },
+          "error_handling": "Skip unmapped fields with warning"
+        },
+        {
+          "operation_id": "2.2",
+          "name": "coerce_data_types",
+          "function": "apply_type_coercion",
+          "inputs": ["cad_normalized_df", "rms_normalized_df"],
+          "outputs": ["cad_typed_df", "rms_typed_df"],
+          "parameters": {
+            "datetime_cols": ["TimeOfCall", "TimeDispatched", "TimeOut", "TimeIn"],
+            "numeric_cols": ["Latitude", "Longitude"],
+            "string_cols": ["ReportNumberNew", "Incident", "FullAddress2"]
+          },
+          "error_handling": "Coerce errors to NaT/NaN; log conversion failures"
+        },
+        {
+          "operation_id": "2.3",
+          "name": "strip_whitespace",
+          "function": "df.apply(lambda x: x.str.strip() if x.dtype == 'object' else x)",
+          "inputs": ["cad_typed_df", "rms_typed_df"],
+          "outputs": ["cad_clean_df", "rms_clean_df"],
+          "parameters": {},
+          "error_handling": "None (safe operation)"
+        }
+      ],
+      "success_criteria": "All expected fields renamed and typed correctly",
+      "rollback_action": "Revert to raw dataframes"
+    },
+    
+    {
+      "stage_id": 3,
+      "stage_name": "standardize",
+      "description": "Apply field-specific standardization and cleaning rules",
+      "operations": [
+        {
+          "operation_id": "3.1",
+          "name": "fix_case_numbers",
+          "function": "standardize_case_numbers",
+          "inputs": ["cad_clean_df", "rms_clean_df"],
+          "outputs": ["cad_std_df", "rms_std_df"],
+          "parameters": {
+            "pattern": "\\d{2}-\\d{6}",
+            "extract_method": "str.extract"
+          },
+          "error_handling": "Drop records without valid case numbers"
+        },
+        {
+          "operation_id": "3.2",
+          "name": "fix_how_reported",
+          "function": "fix_how_reported_field",
+          "inputs": ["cad_std_df"],
+          "outputs": ["cad_std_df"],
+          "parameters": {
+            "patterns_to_fix": [".*1901.*", ".*44197.*", ".*sep.*1.*1901.*", "^911$"],
+            "replacement": "9-1-1"
+          },
+          "error_handling": "Log number of fixes applied"
+        },
+        {
+          "operation_id": "3.3",
+          "name": "standardize_disposition",
+          "function": "standardize_disposition_field",
+          "inputs": ["cad_std_df", "rms_std_df"],
+          "outputs": ["cad_std_df", "rms_std_df"],
+          "parameters": {
+            "replacements": {
+              "sees Report": "See Report",
+              "goa": "GOA",
+              "utl": "UTL"
+            }
+          },
+          "error_handling": "Log number of standardizations applied"
+        },
+        {
+          "operation_id": "3.4",
+          "name": "clean_narratives",
+          "function": "clean_narrative_fields",
+          "inputs": ["cad_std_df", "rms_std_df"],
+          "outputs": ["cad_std_df", "rms_std_df"],
+          "parameters": {
+            "fields": ["CADNotes", "Narrative"],
+            "artifact_patterns": ["\\?\\s*-\\s*\\?\\?\\s*-\\s*\\?\\s*-\\s*\\?", "^\\?\\s*$"]
+          },
+          "error_handling": "Log number of artifacts removed"
+        },
+        {
+          "operation_id": "3.5",
+          "name": "validate_addresses",
+          "function": "validate_and_flag_addresses",
+          "inputs": ["cad_std_df"],
+          "outputs": ["cad_std_df"],
+          "parameters": {
+            "street_names_file": "ref/Hackensack_Street_Names.csv",
+            "flag_col": "Address_Needs_Review"
+          },
+          "error_handling": "Flag invalid addresses; don't block pipeline"
+        }
+      ],
+      "success_criteria": "All standardization rules applied successfully",
+      "rollback_action": "Revert to normalized dataframes"
+    },
+    
+    {
+      "stage_id": 4,
+      "stage_name": "merge",
+      "description": "Join CAD and RMS data on case number",
+      "operations": [
+        {
+          "operation_id": "4.1",
+          "name": "validate_join_keys",
+          "function": "validate_join_keys",
+          "inputs": ["cad_std_df", "rms_std_df"],
+          "outputs": ["validation_report"],
+          "parameters": {
+            "cad_key": "ReportNumberNew",
+            "rms_key": "CaseNumber"
+          },
+          "error_handling": "Raise error if >50% of CAD records lack valid case numbers"
+        },
+        {
+          "operation_id": "4.2",
+          "name": "perform_join",
+          "function": "pd.merge",
+          "inputs": ["cad_std_df", "rms_std_df"],
+          "outputs": ["merged_df"],
+          "parameters": {
+            "how": "left",
+            "left_on": "ReportNumberNew",
+            "right_on": "CaseNumber",
+            "suffixes": ["_cad", "_rms"]
+          },
+          "error_handling": "Log merge statistics (matched/unmatched records)"
+        },
+        {
+          "operation_id": "4.3",
+          "name": "flag_orphaned_records",
+          "function": "identify_orphaned_records",
+          "inputs": ["merged_df"],
+          "outputs": ["merged_df", "orphan_report"],
+          "parameters": {
+            "flag_col": "Has_RMS_Record"
+          },
+          "error_handling": "Log warning if >30% of CAD records are orphaned"
+        }
+      ],
+      "success_criteria": "Merge completed with >70% match rate",
+      "rollback_action": "Revert to separate CAD/RMS dataframes"
+    },
+    
+    {
+      "stage_id": 5,
+      "stage_name": "backfill",
+      "description": "Apply conditional fills and enrichment from RMS to CAD",
+      "operations": [
+        {
+          "operation_id": "5.1",
+          "name": "backfill_addresses",
+          "function": "conditional_address_backfill",
+          "inputs": ["merged_df"],
+          "outputs": ["merged_df"],
+          "parameters": {
+            "cad_field": "FullAddress2",
+            "rms_field": "Location",
+            "condition": "pd.isna(FullAddress2) or Address_Needs_Review == True",
+            "flag_col": "Address_Backfilled"
+          },
+          "error_handling": "Log number of backfills applied"
+        },
+        {
+          "operation_id": "5.2",
+          "name": "backfill_incidents",
+          "function": "hierarchical_incident_backfill",
+          "inputs": ["merged_df"],
+          "outputs": ["merged_df"],
+          "parameters": {
+            "cad_field": "Incident",
+            "rms_fields": ["IncidentType1", "IncidentType2", "IncidentType3"],
+            "precedence": "IncidentType1 > IncidentType2 > IncidentType3",
+            "flag_col": "Incident_Backfilled"
+          },
+          "error_handling": "Log backfill statistics by priority level"
+        },
+        {
+          "operation_id": "5.3",
+          "name": "backfill_geocoding",
+          "function": "conditional_geocode_backfill",
+          "inputs": ["merged_df"],
+          "outputs": ["merged_df"],
+          "parameters": {
+            "cad_lat_field": "CAD_Latitude",
+            "cad_lon_field": "CAD_Longitude",
+            "rms_lat_field": "RMS_Latitude",
+            "rms_lon_field": "RMS_Longitude",
+            "condition": "pd.isna(CAD_Latitude) or pd.isna(CAD_Longitude)",
+            "flag_col": "Geocode_Backfilled"
+          },
+          "error_handling": "Validate coordinates are within Hackensack bounds"
+        },
+        {
+          "operation_id": "5.4",
+          "name": "append_narratives",
+          "function": "append_rms_narrative",
+          "inputs": ["merged_df"],
+          "outputs": ["merged_df"],
+          "parameters": {
+            "cad_field": "CADNotes",
+            "rms_field": "Narrative",
+            "delimiter": " | RMS: ",
+            "condition": "pd.notna(Narrative)"
+          },
+          "error_handling": "None (safe operation)"
+        }
+      ],
+      "success_criteria": "Backfill operations completed; >80% of NULL fields filled where RMS data available",
+      "rollback_action": "Revert backfilled fields to original CAD values"
+    },
+    
+    {
+      "stage_id": 6,
+      "stage_name": "derive",
+      "description": "Calculate derived fields and quality metrics",
+      "operations": [
+        {
+          "operation_id": "6.1",
+          "name": "calculate_response_time",
+          "function": "calculate_time_difference",
+          "inputs": ["merged_df"],
+          "outputs": ["merged_df"],
+          "parameters": {
+            "start_field": "TimeOfCall",
+            "end_field": "TimeDispatched",
+            "output_field": "CAD_Response_Time_Minutes",
+            "unit": "minutes"
+          },
+          "error_handling": "Set to NaN if time sequence invalid"
+        },
+        {
+          "operation_id": "6.2",
+          "name": "calculate_on_scene_duration",
+          "function": "calculate_time_difference",
+          "inputs": ["merged_df"],
+          "outputs": ["merged_df"],
+          "parameters": {
+            "start_field": "TimeOut",
+            "end_field": "TimeIn",
+            "output_field": "CAD_On_Scene_Duration_Minutes",
+            "unit": "minutes"
+          },
+          "error_handling": "Set to NaN if time sequence invalid"
+        },
+        {
+          "operation_id": "6.3",
+          "name": "categorize_time_of_day",
+          "function": "categorize_hour",
+          "inputs": ["merged_df"],
+          "outputs": ["merged_df"],
+          "parameters": {
+            "datetime_field": "TimeOfCall",
+            "output_field": "CAD_Time_Of_Day",
+            "categories": {
+              "0-3": "00:00 - 03:59 - Early Morning",
+              "4-7": "04:00 - 07:59 - Morning",
+              "8-11": "08:00 - 11:59 - Morning Peak",
+              "12-15": "12:00 - 15:59 - Afternoon",
+              "16-19": "16:00 - 19:59 - Evening Peak",
+              "20-23": "20:00 - 23:59 - Night"
+            }
+          },
+          "error_handling": "Set to 'Unknown' if datetime invalid"
+        },
+        {
+          "operation_id": "6.4",
+          "name": "extract_day_of_week",
+          "function": "extract_day_name",
+          "inputs": ["merged_df"],
+          "outputs": ["merged_df"],
+          "parameters": {
+            "datetime_field": "TimeOfCall",
+            "output_field": "CAD_Day_of_Week"
+          },
+          "error_handling": "Set to 'Unknown' if datetime invalid"
+        },
+        {
+          "operation_id": "6.5",
+          "name": "calculate_quality_score",
+          "function": "calculate_data_quality_score",
+          "inputs": ["merged_df"],
+          "outputs": ["merged_df"],
+          "parameters": {
+            "scoring_rules": {
+              "has_case_number": 20,
+              "has_address": 20,
+              "has_call_time": 10,
+              "has_dispatch_time": 10,
+              "has_officer": 20,
+              "has_disposition": 10,
+              "has_incident": 10
+            },
+            "output_field": "Data_Quality_Score"
+          },
+          "error_handling": "Default to 0 if calculation fails"
+        },
+        {
+          "operation_id": "6.6",
+          "name": "extract_block",
+          "function": "extract_address_block",
+          "inputs": ["merged_df"],
+          "outputs": ["merged_df"],
+          "parameters": {
+            "address_field": "FullAddress2",
+            "output_field": "CAD_Block",
+            "block_size": 100
+          },
+          "error_handling": "Return original address if parsing fails"
+        }
+      ],
+      "success_criteria": "All derived fields calculated successfully",
+      "rollback_action": "Remove derived field columns"
+    },
+    
+    {
+      "stage_id": 7,
+      "stage_name": "validate",
+      "description": "Run comprehensive validation checks and generate quality report",
+      "operations": [
+        {
+          "operation_id": "7.1",
+          "name": "validate_case_numbers",
+          "function": "check_case_number_format",
+          "inputs": ["merged_df"],
+          "outputs": ["validation_results"],
+          "parameters": {
+            "pattern": "\\d{2}-\\d{6}",
+            "field": "ReportNumberNew"
+          },
+          "error_handling": "Flag invalid records; don't block pipeline"
+        },
+        {
+          "operation_id": "7.2",
+          "name": "validate_time_sequences",
+          "function": "check_time_sequence",
+          "inputs": ["merged_df"],
+          "outputs": ["validation_results"],
+          "parameters": {
+            "sequences": [
+              ["TimeOfCall", "TimeDispatched"],
+              ["TimeDispatched", "TimeOut"],
+              ["TimeOut", "TimeIn"]
+            ]
+          },
+          "error_handling": "Flag violations; log warning"
+        },
+        {
+          "operation_id": "7.3",
+          "name": "validate_addresses",
+          "function": "check_address_completeness",
+          "inputs": ["merged_df"],
+          "outputs": ["validation_results"],
+          "parameters": {
+            "address_field": "FullAddress2",
+            "required_components": ["street_number", "street_name"]
+          },
+          "error_handling": "Flag incomplete addresses"
+        },
+        {
+          "operation_id": "7.4",
+          "name": "validate_coordinates",
+          "function": "check_coordinate_validity",
+          "inputs": ["merged_df"],
+          "outputs": ["validation_results"],
+          "parameters": {
+            "lat_field": "CAD_Latitude",
+            "lon_field": "CAD_Longitude",
+            "bounds": {
+              "lat_min": 40.85,
+              "lat_max": 40.91,
+              "lon_min": -74.07,
+              "lon_max": -74.03
+            }
+          },
+          "error_handling": "Flag out-of-bounds coordinates"
+        },
+        {
+          "operation_id": "7.5",
+          "name": "validate_controlled_values",
+          "function": "check_allowed_values",
+          "inputs": ["merged_df"],
+          "outputs": ["validation_results"],
+          "parameters": {
+            "fields_to_check": {
+              "HowReported": ["9-1-1", "Phone", "Walk-in", "Self-Initiated", "Radio", "Other"],
+              "Disposition": "ref/Disposition_Types.csv",
+              "PDZone": ["Z1", "Z2", "Z3", "Z4", "UNK"]
+            }
+          },
+          "error_handling": "Flag values not in controlled vocabulary"
+        },
+        {
+          "operation_id": "7.6",
+          "name": "generate_validation_report",
+          "function": "create_validation_summary",
+          "inputs": ["validation_results"],
+          "outputs": ["validation_report.json"],
+          "parameters": {
+            "include_error_counts": true,
+            "include_field_coverage": true,
+            "include_quality_metrics": true
+          },
+          "error_handling": "Log error if report generation fails"
+        }
+      ],
+      "success_criteria": "Validation completed; error rate <5%",
+      "rollback_action": "None (validation only, no modifications)"
+    },
+    
+    {
+      "stage_id": 8,
+      "stage_name": "export",
+      "description": "Write cleaned and enriched data to output formats",
+      "operations": [
+        {
+          "operation_id": "8.1",
+          "name": "export_csv",
+          "function": "df.to_csv",
+          "inputs": ["merged_df"],
+          "outputs": ["output_file.csv"],
+          "parameters": {
+            "index": false,
+            "encoding": "utf-8-sig"
+          },
+          "error_handling": "Raise exception if write fails"
+        },
+        {
+          "operation_id": "8.2",
+          "name": "export_excel",
+          "function": "df.to_excel",
+          "inputs": ["merged_df"],
+          "outputs": ["output_file.xlsx"],
+          "parameters": {
+            "index": false,
+            "engine": "openpyxl"
+          },
+          "error_handling": "Raise exception if write fails"
+        },
+        {
+          "operation_id": "8.3",
+          "name": "export_esri",
+          "function": "export_esri_format",
+          "inputs": ["merged_df"],
+          "outputs": ["esri_export.xlsx"],
+          "parameters": {
+            "fields": ["ReportNumberNew", "Incident", "ResponseType", "FullAddress2", "TimeOfCall", "Disposition"],
+            "title_case": true,
+            "utf8_bom": true
+          },
+          "error_handling": "Raise exception if write fails"
+        },
+        {
+          "operation_id": "8.4",
+          "name": "export_quality_report",
+          "function": "export_validation_report",
+          "inputs": ["validation_results"],
+          "outputs": ["quality_report.json"],
+          "parameters": {
+            "pretty_print": true
+          },
+          "error_handling": "Log warning if export fails"
+        }
+      ],
+      "success_criteria": "All export files written successfully",
+      "rollback_action": "Delete partial export files"
+    }
+  ],
+  
+  "global_error_handling": {
+    "log_all_errors": true,
+    "log_file": "logs/etl_pipeline.log",
+    "continue_on_warning": true,
+    "halt_on_error": true,
+    "send_email_on_failure": false
+  },
+  
+  "performance_tuning": {
+    "chunk_size": 10000,
+    "use_multiprocessing": true,
+    "max_workers": 4,
+    "memory_limit_mb": 4096
+  }
+}

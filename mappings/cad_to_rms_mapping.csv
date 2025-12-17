@@ -1,0 +1,13 @@
+CAD_Field,RMS_Field,TransformName,JoinKeyStrategy,PrecedenceRules,DataType,EdgeCaseNotes,ValidationRule
+ReportNumberNew,CaseNumber,DIRECT_MAP,PRIMARY_JOIN,CAD.ReportNumberNew = RMS.CaseNumber,STRING,"CAD case number drives merge; all CAD records should have corresponding RMS record",check_join_key_match
+FullAddress2,Location,ADDRESS_ENRICH,CONDITIONAL_FILL,Fill RMS.Location if NULL; CAD address takes precedence,STRING,"CAD address more current; RMS may lag behind CAD updates",check_address_completeness
+Incident,IncidentType1,INCIDENT_CLASSIFY,CONDITIONAL_FILL,Map CAD.Incident to RMS incident types via lookup,STRING,"CAD incident may need to be split into multiple RMS incident types",check_incident_type_mapping
+TimeOfCall,IncidentDate,DATETIME_EXTRACT,DATE_ONLY,Extract date portion: TimeOfCall.date() → IncidentDate,DATE,"RMS uses date-only field; time component in separate field",check_date_format
+TimeOfCall,IncidentTime,DATETIME_EXTRACT,TIME_ONLY,Extract time portion: TimeOfCall.time() → IncidentTime,TIME,"Extract HH:MM:SS from datetime",check_time_format
+HowReported,ReportMethod,STANDARDIZE_VOCAB,VOCABULARY_MAP,Map: '9-1-1' → 'Emergency Call', 'Phone' → 'Non-Emergency Call',STRING,"Vocabulary differs between systems; maintain mapping table",check_how_reported_standardization
+Disposition,FinalDisposition,DISPOSITION_MAP,VOCABULARY_MAP,Map CAD disposition codes to RMS codes,STRING,"Similar but not identical vocabularies",check_disposition_consistency
+Officer,PrimaryOfficer,OFFICER_PARSE,FIRST_OFFICER_ONLY,Extract first officer from comma-separated list,STRING,"CAD may have multiple officers; RMS wants primary officer only",check_officer_format
+PDZone,Beat,ZONE_MAP,VOCABULARY_MAP,Map CAD zones to RMS beats: Z1 → Beat1, Z2 → Beat2,STRING,"Different terminology for same concept",check_zone_validity
+Grid,Sector,GRID_MAP,VOCABULARY_MAP,Map CAD grids to RMS sectors,STRING,"Sub-zone granularity mapping",check_grid_validity
+CADNotes,OfficerNotes,TEXT_TRANSFER,CONDITIONAL_FILL,Copy CADNotes to RMS.OfficerNotes if RMS field is NULL,TEXT,"Preserve CAD dispatcher notes in RMS",check_narrative_artifacts
+ResponseType,Priority,PRIORITY_MAP,VOCABULARY_MAP,Map: 'Emergency' → 'Priority 1', 'Routine' → 'Priority 3',STRING,"Priority coding differs between systems",check_priority_mapping

@@ -1,0 +1,14 @@
+RMS_Field,CAD_Field,TransformName,JoinKeyStrategy,PrecedenceRules,DataType,EdgeCaseNotes,ValidationRule
+CaseNumber,ReportNumberNew,DIRECT_MAP,PRIMARY_JOIN,RMS.CaseNumber = CAD.ReportNumberNew,STRING,"Must exist in CAD for valid merge; orphaned RMS records indicate data sync issues",check_join_key_match
+Location,FullAddress2,ADDRESS_BACKFILL,CONDITIONAL_FILL,Only fill if CAD.FullAddress2 is NULL or invalid,STRING,"Apply only when CAD address is blank or fails validation; preserve CAD address if valid",check_address_completeness
+IncidentType1,Incident,INCIDENT_BACKFILL_P1,CONDITIONAL_FILL,Use IncidentType1 first if CAD.Incident is NULL,STRING,"First priority in incident backfill hierarchy; map via CallType_Categories.csv if needed",check_incident_type_mapping
+IncidentType2,Incident,INCIDENT_BACKFILL_P2,CONDITIONAL_FILL,Use IncidentType2 if CAD.Incident and IncidentType1 are NULL,STRING,"Second priority; only applies when IncidentType1 unavailable",check_incident_type_mapping
+IncidentType3,Incident,INCIDENT_BACKFILL_P3,CONDITIONAL_FILL,Use IncidentType3 if CAD.Incident and IncidentType1/2 are NULL,STRING,"Third priority; last fallback for incident classification",check_incident_type_mapping
+Narrative,CADNotes,TEXT_APPEND,ENRICHMENT,Append RMS.Narrative to CAD.CADNotes with delimiter,TEXT,"Separate with ' | RMS: ' delimiter; preserve both narratives",check_narrative_artifacts
+ArrestDate,TimeOfCall,DATE_RECONCILE,VALIDATION_ONLY,Validate ArrestDate within 24h of CAD.TimeOfCall,DATETIME,"Large discrepancy may indicate data entry error or delayed arrest",check_time_sequence
+OfficerName,Officer,OFFICER_STANDARDIZE,ENRICHMENT,Standardize format using Assignment_Master_V2.xlsx,STRING,"Parse rank/badge/name; RMS may have more complete officer names",check_officer_format
+Disposition,Disposition,DISPOSITION_STANDARDIZE,ENRICHMENT,Standardize: 'Arrest' → 'Arrest Made', etc.,STRING,"Both systems use similar but not identical disposition codes",check_disposition_consistency
+Latitude,CAD_Latitude,GEOCODE_BACKFILL,CONDITIONAL_FILL,Fill CAD.Latitude if NULL and RMS.Latitude exists,FLOAT,"RMS geocoding may be more accurate for certain locations",check_coordinate_validity
+Longitude,CAD_Longitude,GEOCODE_BACKFILL,CONDITIONAL_FILL,Fill CAD.Longitude if NULL and RMS.Longitude exists,FLOAT,"Validate coordinate pairs are in Hackensack bounds",check_coordinate_validity
+VictimAge,Victim_Age_Calculated,AGE_VALIDATION,ENRICHMENT,Cross-validate with CAD victim age if present,INTEGER,"Flag if ages differ by more than 1 year (data entry error indicator)",check_age_range
+UCRCode,CAD_UCR_Code,UCR_BACKFILL,CONDITIONAL_FILL,Fill CAD.UCRCode from RMS if NULL,STRING,"RMS UCR coding may be more accurate due to report review process",check_ucr_validity

@@ -1,0 +1,616 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2025-12-17T19:30:00Z",
+  "author": "R. A. Carucci",
+  "description": "Canonical schema for unified CAD/RMS data dictionary",
+  
+  "fields": {
+    "ReportNumberNew": {
+      "display_name": "CAD Case Number",
+      "source_system": "CAD",
+      "internal_field_name": "cad_case_number",
+      "data_type": "string",
+      "format": "YY-NNNNNN",
+      "max_length": 9,
+      "nullable": false,
+      "primary_key": true,
+      "examples": ["24-123456", "25-000001"],
+      "description": "Primary CAD case identifier",
+      "validation_rules": [
+        "Must match pattern \\d{2}-\\d{6}",
+        "Year must be 19-99",
+        "Sequential number must be 000001-999999"
+      ],
+      "derivation": null,
+      "dependencies": [],
+      "used_in": ["all_cad_exports", "cad_rms_merge", "esri_export"],
+      "quality_check": "check_case_number_format",
+      "controlled_values": null
+    },
+    
+    "CaseNumber": {
+      "display_name": "RMS Case Number",
+      "source_system": "RMS",
+      "internal_field_name": "rms_case_number",
+      "data_type": "string",
+      "format": "YY-NNNNNN",
+      "max_length": 9,
+      "nullable": false,
+      "primary_key": true,
+      "examples": ["24-123456", "25-000001"],
+      "description": "Primary RMS case identifier, joins to CAD ReportNumberNew",
+      "validation_rules": [
+        "Must match pattern \\d{2}-\\d{6}",
+        "Must exist in CAD.ReportNumberNew for valid merge"
+      ],
+      "derivation": null,
+      "dependencies": ["ReportNumberNew"],
+      "used_in": ["all_rms_exports", "cad_rms_merge", "dv_backfill"],
+      "quality_check": "check_join_key_match",
+      "controlled_values": null
+    },
+    
+    "Incident": {
+      "display_name": "Incident Type",
+      "source_system": "CAD",
+      "internal_field_name": "incident_type",
+      "data_type": "string",
+      "format": "free_text",
+      "max_length": 255,
+      "nullable": false,
+      "primary_key": false,
+      "examples": ["ASSAULT", "BURGLARY", "MOTOR VEHICLE ACCIDENT", "DOMESTIC VIOLENCE"],
+      "description": "Primary incident classification from CAD",
+      "validation_rules": [
+        "Must not be blank",
+        "Should map to controlled vocabulary via CallType_Categories.csv"
+      ],
+      "derivation": null,
+      "dependencies": [],
+      "used_in": ["ucr_classification", "response_type_mapping", "crime_analysis"],
+      "quality_check": "check_incident_type_mapping",
+      "controlled_values": "ref/CallType_Categories.csv"
+    },
+    
+    "IncidentType1": {
+      "display_name": "RMS Incident Type 1",
+      "source_system": "RMS",
+      "internal_field_name": "rms_incident_type_1",
+      "data_type": "string",
+      "format": "free_text",
+      "max_length": 255,
+      "nullable": true,
+      "primary_key": false,
+      "examples": ["ASSAULT", "THEFT", "TRAFFIC VIOLATION"],
+      "description": "Primary RMS incident type, used for CAD incident backfill",
+      "validation_rules": [
+        "Use IncidentType1 first in backfill precedence"
+      ],
+      "derivation": null,
+      "dependencies": [],
+      "used_in": ["incident_backfill", "ucr_classification"],
+      "quality_check": "check_incident_type_mapping",
+      "controlled_values": "ref/RMS_Incident_Types.csv"
+    },
+    
+    "IncidentType2": {
+      "display_name": "RMS Incident Type 2",
+      "source_system": "RMS",
+      "internal_field_name": "rms_incident_type_2",
+      "data_type": "string",
+      "format": "free_text",
+      "max_length": 255,
+      "nullable": true,
+      "primary_key": false,
+      "examples": ["WEAPONS VIOLATION", "DRUG OFFENSE"],
+      "description": "Secondary RMS incident type, second in backfill precedence",
+      "validation_rules": [
+        "Use IncidentType2 if IncidentType1 is null"
+      ],
+      "derivation": null,
+      "dependencies": ["IncidentType1"],
+      "used_in": ["incident_backfill"],
+      "quality_check": "check_incident_type_mapping",
+      "controlled_values": "ref/RMS_Incident_Types.csv"
+    },
+    
+    "IncidentType3": {
+      "display_name": "RMS Incident Type 3",
+      "source_system": "RMS",
+      "internal_field_name": "rms_incident_type_3",
+      "data_type": "string",
+      "format": "free_text",
+      "max_length": 255,
+      "nullable": true,
+      "primary_key": false,
+      "examples": ["DISORDERLY CONDUCT"],
+      "description": "Tertiary RMS incident type, third in backfill precedence",
+      "validation_rules": [
+        "Use IncidentType3 if IncidentType1 and IncidentType2 are null"
+      ],
+      "derivation": null,
+      "dependencies": ["IncidentType1", "IncidentType2"],
+      "used_in": ["incident_backfill"],
+      "quality_check": "check_incident_type_mapping",
+      "controlled_values": "ref/RMS_Incident_Types.csv"
+    },
+    
+    "FullAddress2": {
+      "display_name": "CAD Address",
+      "source_system": "CAD",
+      "internal_field_name": "cad_address",
+      "data_type": "string",
+      "format": "address",
+      "max_length": 500,
+      "nullable": true,
+      "primary_key": false,
+      "examples": ["123 MAIN STREET", "456 ELM AVENUE APT 2B", "HACKENSACK PARK"],
+      "description": "Primary address from CAD system",
+      "validation_rules": [
+        "Should contain street number and name",
+        "Validate against Hackensack street names",
+        "Backfill from RMS if blank or invalid"
+      ],
+      "derivation": null,
+      "dependencies": [],
+      "used_in": ["geocoding", "mapping", "zone_assignment"],
+      "quality_check": "check_address_completeness",
+      "controlled_values": "ref/Hackensack_Street_Names.csv"
+    },
+    
+    "Location": {
+      "display_name": "RMS Address",
+      "source_system": "RMS",
+      "internal_field_name": "rms_address",
+      "data_type": "string",
+      "format": "address",
+      "max_length": 500,
+      "nullable": true,
+      "primary_key": false,
+      "examples": ["123 MAIN ST", "456 ELM AVE"],
+      "description": "RMS location field, used for CAD address backfill",
+      "validation_rules": [
+        "Only backfill to CAD when FullAddress2 is blank or invalid"
+      ],
+      "derivation": null,
+      "dependencies": ["FullAddress2"],
+      "used_in": ["address_backfill"],
+      "quality_check": "check_address_completeness",
+      "controlled_values": "ref/Hackensack_Street_Names.csv"
+    },
+    
+    "TimeOfCall": {
+      "display_name": "Call Time",
+      "source_system": "CAD",
+      "internal_field_name": "time_of_call",
+      "data_type": "datetime",
+      "format": "YYYY-MM-DD HH:MM:SS",
+      "max_length": null,
+      "nullable": false,
+      "primary_key": false,
+      "examples": ["2024-11-24 14:35:22", "2025-01-15 08:20:00"],
+      "description": "Timestamp when call was received",
+      "validation_rules": [
+        "Must be valid datetime",
+        "Should be <= TimeDispatched",
+        "Should be <= current_time"
+      ],
+      "derivation": null,
+      "dependencies": [],
+      "used_in": ["response_time_calc", "shift_analysis", "time_of_day_categorization"],
+      "quality_check": "check_time_sequence",
+      "controlled_values": null
+    },
+    
+    "TimeDispatched": {
+      "display_name": "Dispatch Time",
+      "source_system": "CAD",
+      "internal_field_name": "time_dispatched",
+      "data_type": "datetime",
+      "format": "YYYY-MM-DD HH:MM:SS",
+      "max_length": null,
+      "nullable": true,
+      "primary_key": false,
+      "examples": ["2024-11-24 14:37:15", "2025-01-15 08:22:30"],
+      "description": "Timestamp when unit was dispatched",
+      "validation_rules": [
+        "Must be valid datetime",
+        "Should be >= TimeOfCall",
+        "Should be <= TimeOut"
+      ],
+      "derivation": null,
+      "dependencies": ["TimeOfCall"],
+      "used_in": ["response_time_calc"],
+      "quality_check": "check_time_sequence",
+      "controlled_values": null
+    },
+    
+    "TimeOut": {
+      "display_name": "Arrival Time",
+      "source_system": "CAD",
+      "internal_field_name": "time_out",
+      "data_type": "datetime",
+      "format": "YYYY-MM-DD HH:MM:SS",
+      "max_length": null,
+      "nullable": true,
+      "primary_key": false,
+      "examples": ["2024-11-24 14:42:00", "2025-01-15 08:28:45"],
+      "description": "Timestamp when unit arrived on scene",
+      "validation_rules": [
+        "Must be valid datetime",
+        "Should be >= TimeDispatched",
+        "Should be <= TimeIn"
+      ],
+      "derivation": null,
+      "dependencies": ["TimeDispatched"],
+      "used_in": ["on_scene_duration_calc"],
+      "quality_check": "check_time_sequence",
+      "controlled_values": null
+    },
+    
+    "TimeIn": {
+      "display_name": "Clear Time",
+      "source_system": "CAD",
+      "internal_field_name": "time_in",
+      "data_type": "datetime",
+      "format": "YYYY-MM-DD HH:MM:SS",
+      "max_length": null,
+      "nullable": true,
+      "primary_key": false,
+      "examples": ["2024-11-24 15:15:00", "2025-01-15 09:05:20"],
+      "description": "Timestamp when unit cleared scene",
+      "validation_rules": [
+        "Must be valid datetime",
+        "Should be >= TimeOut"
+      ],
+      "derivation": null,
+      "dependencies": ["TimeOut"],
+      "used_in": ["on_scene_duration_calc", "unit_availability"],
+      "quality_check": "check_time_sequence",
+      "controlled_values": null
+    },
+    
+    "HowReported": {
+      "display_name": "How Reported",
+      "source_system": "CAD",
+      "internal_field_name": "how_reported",
+      "data_type": "string",
+      "format": "categorical",
+      "max_length": 50,
+      "nullable": true,
+      "primary_key": false,
+      "examples": ["9-1-1", "Phone", "Walk-in", "Self-Initiated"],
+      "description": "Method by which incident was reported",
+      "validation_rules": [
+        "Must be in controlled vocabulary",
+        "Fix Excel date artifacts (1901 dates → '9-1-1')"
+      ],
+      "derivation": null,
+      "dependencies": [],
+      "used_in": ["911_analysis", "reporting_method_stats"],
+      "quality_check": "check_how_reported_standardization",
+      "controlled_values": ["9-1-1", "Phone", "Walk-in", "Self-Initiated", "Radio", "Other"]
+    },
+    
+    "Disposition": {
+      "display_name": "Disposition",
+      "source_system": "CAD",
+      "internal_field_name": "disposition",
+      "data_type": "string",
+      "format": "categorical",
+      "max_length": 100,
+      "nullable": false,
+      "primary_key": false,
+      "examples": ["Report Taken", "Arrest Made", "GOA", "UTL", "Unfounded"],
+      "description": "Final disposition/outcome of incident",
+      "validation_rules": [
+        "Must not be blank",
+        "Should be in controlled vocabulary",
+        "Standardize: 'sees Report' → 'See Report', 'goa' → 'GOA', 'utl' → 'UTL'"
+      ],
+      "derivation": null,
+      "dependencies": [],
+      "used_in": ["clearance_analysis", "outcome_reporting"],
+      "quality_check": "check_disposition_consistency",
+      "controlled_values": "ref/Disposition_Types.csv"
+    },
+    
+    "ResponseType": {
+      "display_name": "Response Type",
+      "source_system": "CAD",
+      "internal_field_name": "response_type",
+      "data_type": "string",
+      "format": "categorical",
+      "max_length": 100,
+      "nullable": true,
+      "primary_key": false,
+      "examples": ["Emergency", "Routine", "Priority"],
+      "description": "Type of response dispatched",
+      "validation_rules": [
+        "Fill blanks with 'Not Specified'",
+        "Map from Incident via CallType_Categories.csv"
+      ],
+      "derivation": "Derived from Incident field via call type mapping",
+      "dependencies": ["Incident"],
+      "used_in": ["priority_analysis", "response_time_analysis"],
+      "quality_check": "check_response_type_coverage",
+      "controlled_values": "ref/CallType_Categories.csv"
+    },
+    
+    "PDZone": {
+      "display_name": "Police Zone",
+      "source_system": "CAD",
+      "internal_field_name": "pd_zone",
+      "data_type": "string",
+      "format": "zone_code",
+      "max_length": 10,
+      "nullable": true,
+      "primary_key": false,
+      "examples": ["Z1", "Z2", "Z3", "Z4"],
+      "description": "Police patrol zone assignment",
+      "validation_rules": [
+        "Should be valid zone code",
+        "Default to 'UNK' if null"
+      ],
+      "derivation": "Derived from FullAddress2 via geocoding",
+      "dependencies": ["FullAddress2"],
+      "used_in": ["zone_analysis", "deployment_planning"],
+      "quality_check": "check_zone_validity",
+      "controlled_values": ["Z1", "Z2", "Z3", "Z4", "UNK"]
+    },
+    
+    "Grid": {
+      "display_name": "Grid",
+      "source_system": "CAD",
+      "internal_field_name": "grid",
+      "data_type": "string",
+      "format": "grid_code",
+      "max_length": 10,
+      "nullable": true,
+      "primary_key": false,
+      "examples": ["G1A", "G2B", "G3C"],
+      "description": "Sub-zone grid assignment",
+      "validation_rules": [
+        "Should be valid grid code"
+      ],
+      "derivation": "Derived from FullAddress2 via geocoding",
+      "dependencies": ["FullAddress2"],
+      "used_in": ["hot_spot_analysis", "grid_mapping"],
+      "quality_check": "check_grid_validity",
+      "controlled_values": "ref/Grid_Codes.csv"
+    },
+    
+    "Officer": {
+      "display_name": "Officer",
+      "source_system": "CAD",
+      "internal_field_name": "officer",
+      "data_type": "string",
+      "format": "free_text",
+      "max_length": 255,
+      "nullable": true,
+      "primary_key": false,
+      "examples": ["SGT SMITH 1234", "OFFICER JONES", "LT BROWN 5678"],
+      "description": "Responding officer(s)",
+      "validation_rules": [
+        "Parse for rank, name, badge"
+      ],
+      "derivation": null,
+      "dependencies": [],
+      "used_in": ["officer_workload", "assignment_tracking"],
+      "quality_check": "check_officer_format",
+      "controlled_values": "ref/Assignment_Master_V2.xlsx"
+    },
+    
+    "CADNotes": {
+      "display_name": "CAD Notes",
+      "source_system": "CAD",
+      "internal_field_name": "cad_notes",
+      "data_type": "text",
+      "format": "free_text",
+      "max_length": 65535,
+      "nullable": true,
+      "primary_key": false,
+      "examples": ["Units responded to MVA with injuries", "Suspect fled on foot"],
+      "description": "Free-text notes from CAD dispatcher",
+      "validation_rules": [
+        "Clean artifacts: '?-??-?-?' patterns",
+        "Remove excess whitespace"
+      ],
+      "derivation": null,
+      "dependencies": [],
+      "used_in": ["narrative_analysis", "quality_review"],
+      "quality_check": "check_narrative_artifacts",
+      "controlled_values": null
+    },
+    
+    "Narrative": {
+      "display_name": "RMS Narrative",
+      "source_system": "RMS",
+      "internal_field_name": "rms_narrative",
+      "data_type": "text",
+      "format": "free_text",
+      "max_length": 65535,
+      "nullable": true,
+      "primary_key": false,
+      "examples": ["Officer arrived on scene and observed...", "Witness stated that..."],
+      "description": "Detailed RMS case narrative",
+      "validation_rules": [
+        "Clean artifacts",
+        "Remove excess whitespace"
+      ],
+      "derivation": null,
+      "dependencies": [],
+      "used_in": ["case_review", "investigative_analysis"],
+      "quality_check": "check_narrative_artifacts",
+      "controlled_values": null
+    },
+    
+    "CAD_Response_Time_Minutes": {
+      "display_name": "Response Time (Minutes)",
+      "source_system": "DERIVED",
+      "internal_field_name": "response_time_minutes",
+      "data_type": "float",
+      "format": "decimal",
+      "max_length": null,
+      "nullable": true,
+      "primary_key": false,
+      "examples": [2.5, 5.0, 8.3],
+      "description": "Calculated response time from call to dispatch",
+      "validation_rules": [
+        "Should be >= 0",
+        "Should be < 1440 (24 hours)"
+      ],
+      "derivation": "(TimeDispatched - TimeOfCall) in minutes",
+      "dependencies": ["TimeOfCall", "TimeDispatched"],
+      "used_in": ["response_time_analysis", "performance_metrics"],
+      "quality_check": "check_derived_time_fields",
+      "controlled_values": null
+    },
+    
+    "CAD_On_Scene_Duration_Minutes": {
+      "display_name": "On-Scene Duration (Minutes)",
+      "source_system": "DERIVED",
+      "internal_field_name": "on_scene_duration_minutes",
+      "data_type": "float",
+      "format": "decimal",
+      "max_length": null,
+      "nullable": true,
+      "primary_key": false,
+      "examples": [15.0, 30.5, 45.2],
+      "description": "Calculated on-scene duration",
+      "validation_rules": [
+        "Should be >= 0",
+        "Should be < 1440 (24 hours)"
+      ],
+      "derivation": "(TimeIn - TimeOut) in minutes",
+      "dependencies": ["TimeOut", "TimeIn"],
+      "used_in": ["workload_analysis", "staffing_models"],
+      "quality_check": "check_derived_time_fields",
+      "controlled_values": null
+    },
+    
+    "CAD_Time_Of_Day": {
+      "display_name": "Time of Day",
+      "source_system": "DERIVED",
+      "internal_field_name": "time_of_day",
+      "data_type": "string",
+      "format": "categorical",
+      "max_length": 50,
+      "nullable": true,
+      "primary_key": false,
+      "examples": ["00:00 - 03:59 - Early Morning", "08:00 - 11:59 - Morning Peak"],
+      "description": "Categorized time period",
+      "validation_rules": [
+        "Must be valid time period"
+      ],
+      "derivation": "Categorize TimeOfCall.hour into periods",
+      "dependencies": ["TimeOfCall"],
+      "used_in": ["temporal_analysis", "shift_planning"],
+      "quality_check": "check_categorical_derived",
+      "controlled_values": [
+        "00:00 - 03:59 - Early Morning",
+        "04:00 - 07:59 - Morning",
+        "08:00 - 11:59 - Morning Peak",
+        "12:00 - 15:59 - Afternoon",
+        "16:00 - 19:59 - Evening Peak",
+        "20:00 - 23:59 - Night"
+      ]
+    },
+    
+    "CAD_Day_of_Week": {
+      "display_name": "Day of Week",
+      "source_system": "DERIVED",
+      "internal_field_name": "day_of_week",
+      "data_type": "string",
+      "format": "categorical",
+      "max_length": 10,
+      "nullable": true,
+      "primary_key": false,
+      "examples": ["Monday", "Tuesday", "Wednesday"],
+      "description": "Day name from call date",
+      "validation_rules": [
+        "Must be valid day name"
+      ],
+      "derivation": "TimeOfCall.day_name()",
+      "dependencies": ["TimeOfCall"],
+      "used_in": ["temporal_analysis", "day_of_week_patterns"],
+      "quality_check": "check_categorical_derived",
+      "controlled_values": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    },
+    
+    "CAD_Is_Weekend": {
+      "display_name": "Is Weekend",
+      "source_system": "DERIVED",
+      "internal_field_name": "is_weekend",
+      "data_type": "boolean",
+      "format": "boolean",
+      "max_length": null,
+      "nullable": true,
+      "primary_key": false,
+      "examples": [true, false],
+      "description": "Weekend flag",
+      "validation_rules": [
+        "Must be true/false"
+      ],
+      "derivation": "TimeOfCall.dayofweek in [5, 6]",
+      "dependencies": ["TimeOfCall"],
+      "used_in": ["temporal_analysis", "weekend_staffing"],
+      "quality_check": "check_boolean_derived",
+      "controlled_values": [true, false]
+    },
+    
+    "Data_Quality_Score": {
+      "display_name": "Data Quality Score",
+      "source_system": "DERIVED",
+      "internal_field_name": "data_quality_score",
+      "data_type": "integer",
+      "format": "score",
+      "max_length": null,
+      "nullable": false,
+      "primary_key": false,
+      "examples": [80, 95, 100],
+      "description": "100-point quality assessment",
+      "validation_rules": [
+        "Must be 0-100",
+        "Higher is better"
+      ],
+      "derivation": "Sum of quality checks: case_number(20) + address(20) + time(20) + officer(20) + disposition(10) + incident(10)",
+      "dependencies": ["ReportNumberNew", "FullAddress2", "TimeOfCall", "Officer", "Disposition", "Incident"],
+      "used_in": ["quality_monitoring", "data_filtering"],
+      "quality_check": "check_score_range",
+      "controlled_values": null
+    }
+  },
+  
+  "field_groups": {
+    "identifiers": ["ReportNumberNew", "CaseNumber"],
+    "temporal": ["TimeOfCall", "TimeDispatched", "TimeOut", "TimeIn"],
+    "geographic": ["FullAddress2", "Location", "PDZone", "Grid"],
+    "classification": ["Incident", "IncidentType1", "IncidentType2", "IncidentType3", "ResponseType", "Disposition"],
+    "personnel": ["Officer"],
+    "narrative": ["CADNotes", "Narrative"],
+    "derived_temporal": ["CAD_Response_Time_Minutes", "CAD_On_Scene_Duration_Minutes", "CAD_Time_Of_Day", "CAD_Day_of_Week", "CAD_Is_Weekend"],
+    "quality": ["Data_Quality_Score"]
+  },
+  
+  "data_sources": {
+    "CAD": {
+      "description": "Computer-Aided Dispatch system",
+      "export_frequency": "on_demand",
+      "primary_key": "ReportNumberNew",
+      "typical_record_count": 700000
+    },
+    "RMS": {
+      "description": "Records Management System",
+      "export_frequency": "on_demand",
+      "primary_key": "CaseNumber",
+      "typical_record_count": 500000
+    },
+    "DERIVED": {
+      "description": "Fields calculated during ETL processing",
+      "export_frequency": "n/a",
+      "primary_key": null,
+      "typical_record_count": null
+    }
+  }
+}

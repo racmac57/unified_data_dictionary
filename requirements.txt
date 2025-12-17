@@ -1,0 +1,22 @@
+# Unified Dictionary Framework - Python Dependencies
+# Author: R. A. Carucci
+# Generated: 2025-12-17
+
+# Core data processing
+pandas>=2.0.0
+numpy>=1.24.0
+openpyxl>=3.1.0
+
+# Optional high-performance alternatives
+polars>=0.20.0
+
+# Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+
+# Code quality
+ruff>=0.1.0
+mypy>=1.7.0
+
+# Logging and utilities
+python-dateutil>=2.8.0
