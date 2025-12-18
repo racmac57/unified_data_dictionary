@@ -1,7 +1,43 @@
-# 🕒 2025-12-17-20-05-00
+# 🕒 2025-12-18-00-30-00
 # unified_data_dictionary/CHANGELOG.md
 # Author: R. A. Carucci
 # Purpose: Version history and change log for unified data dictionary project
+
+# Changelog
+
+All notable changes to the Unified Data Dictionary project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0/).
+
+---
+
+## [Unreleased]
+
+### Planned
+- Full schema extraction from `dv_doj`
+- Integration with Power BI datasets
+- CI/CD pipeline deployment
+
+---
+
+## [0.2.1] - 2025-12-18
+
+### 🧹 Maintenance & Optimization
+
+**Summary**: Execution of cleanup scripts to reduce repository bloat and verification of backup integrity.
+
+### Changed
+- **Data Cleanup**: Executed `cleanup_duplicates.ps1` on `KB_Shared\04_output`.
+  - **Result**: Removed ~6,000 duplicate/redundant files (reduced count from ~17.5k to ~11k).
+  - **Logic**: Retained only the newest timestamped folder per processing group; deleted older `reprocess_` chunks.
+- **Backup Verification**: Confirmed integrity of critical data transfer to `_Sandbox`.
+  - Verified `SYNC\ssocc_desk` (70GB) backup.
+  - Verified `02_ETL_Scripts` (Includes `Arrests`, `Response_Times`, `Overtime_TimeOff`).
+
+---
+
+## [0.2.0] - 2025-12-17
 
 # Changelog
 

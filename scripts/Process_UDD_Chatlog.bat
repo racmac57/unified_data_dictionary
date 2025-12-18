@@ -2,10 +2,7 @@
 REM ============================================================================
 REM Process Chatlog for unified_data_dictionary
 REM ============================================================================
-REM Purpose: Automated chatlog processing for unified_data_dictionary project
-REM Author: R. A. Carucci
-REM Date: 2025-12-17
-REM Version: 1.0.0
+REM Version: 1.0.7 (Fixed: Atomic Staging to prevent duplicate processing)
 REM ============================================================================
 
 setlocal enabledelayedexpansion
@@ -14,158 +11,132 @@ REM Project paths
 set "PROJECT_ROOT=C:\Users\carucci_r\OneDrive - City of Hackensack\09_Reference\Standards\unified_data_dictionary"
 set "RAW_DIR=%PROJECT_ROOT%\docs\chatlogs\raw"
 set "CHUNKED_DIR=%PROJECT_ROOT%\docs\chatlogs\chunked"
-set "CHUNKER_BATCH=C:\_chunker\opus\Chunker_Move.bat"
+set "CHUNKER_ROOT=C:\_chunker\opus"
+
+REM External paths
+set "CHUNKER_INPUT=C:\_chunker\02_data"
 set "CHUNKER_OUTPUT=C:\Users\carucci_r\OneDrive - City of Hackensack\KB_Shared\04_output"
 
-REM Check if file was provided
+REM ============================================================================
+REM CHECK: File Selection
+REM ============================================================================
 if "%~1"=="" (
-    echo.
-    echo ============================================================================
-    echo  UNIFIED DATA DICTIONARY - CHATLOG PROCESSOR
-    echo ============================================================================
-    echo.
-    echo ERROR: No file provided!
-    echo.
-    echo Usage:
-    echo   1. Drag and drop a chatlog .md file onto this script
-    echo   2. Or run from DOpus button with selected file
-    echo.
-    echo ============================================================================
+    echo [ERROR] No file selected.
     pause
     exit /b 1
 )
 
 set "INPUT_FILE=%~1"
 set "FILENAME=%~nx1"
-
-REM Verify input file exists
-if not exist "%INPUT_FILE%" (
-    echo.
-    echo ERROR: File not found: %INPUT_FILE%
-    pause
-    exit /b 1
-)
+set "BASENAME=%~n1"
 
 echo.
 echo ============================================================================
-echo  UNIFIED DATA DICTIONARY - CHATLOG PROCESSOR
+echo  UNIFIED DATA DICTIONARY - CHATLOG PROCESSOR v1.0.7
 echo ============================================================================
 echo.
 echo Processing: %FILENAME%
-echo Project: unified_data_dictionary
-echo.
-echo ============================================================================
 
 REM ============================================================================
-REM STEP 1: Move to raw/
+REM STEP 1: Move to Project Raw Folder
 REM ============================================================================
-echo.
-echo [STEP 1/4] Moving to raw folder...
+echo [STEP 1/4] Saving to project raw folder...
 
-if not exist "%RAW_DIR%" (
-    echo Creating raw directory...
-    mkdir "%RAW_DIR%"
-)
+if not exist "%RAW_DIR%" mkdir "%RAW_DIR%"
 
-copy "%INPUT_FILE%" "%RAW_DIR%\" >nul
-if errorlevel 1 (
-    echo ERROR: Failed to copy to raw folder
-    pause
-    exit /b 1
-)
-
-echo   [OK] Saved to: docs\chatlogs\raw\%FILENAME%
-
-REM ============================================================================
-REM STEP 2: Chunk the file
-REM ============================================================================
-echo.
-echo [STEP 2/4] Chunking file...
-
-REM Check if chunker exists
-if not exist "%CHUNKER_BATCH%" (
-    echo ERROR: Chunker not found at %CHUNKER_BATCH%
-    pause
-    exit /b 1
-)
-
-REM Run chunker on the raw file
-call "%CHUNKER_BATCH%" "%RAW_DIR%\%FILENAME%" >nul 2>&1
-
-REM Wait for chunking to complete (max 30 seconds)
-set "TIMEOUT_COUNT=0"
-:WAIT_FOR_CHUNK
-timeout /t 1 /nobreak >nul
-set /a TIMEOUT_COUNT+=1
-
-REM Check if chunked file appeared in output
-dir "%CHUNKER_OUTPUT%\%FILENAME%" >nul 2>&1
-if errorlevel 1 (
-    if %TIMEOUT_COUNT% lss 30 goto WAIT_FOR_CHUNK
-    echo ERROR: Chunking timed out
-    pause
-    exit /b 1
-)
-
-echo   [OK] File chunked successfully
-
-REM ============================================================================
-REM STEP 3: Move chunked file
-REM ============================================================================
-echo.
-echo [STEP 3/4] Moving chunked file...
-
-if not exist "%CHUNKED_DIR%" (
-    echo Creating chunked directory...
-    mkdir "%CHUNKED_DIR%"
-)
-
-REM Wait a moment for file system
-timeout /t 2 /nobreak >nul
-
-REM Move chunked file
-if exist "%CHUNKER_OUTPUT%\%FILENAME%" (
-    move /Y "%CHUNKER_OUTPUT%\%FILENAME%" "%CHUNKED_DIR%\" >nul
+if /i "%~dp1"=="%RAW_DIR%\" (
+    echo   [INFO] File is already in raw folder.
+) else (
+    move /Y "%INPUT_FILE%" "%RAW_DIR%\" >nul
     if errorlevel 1 (
-        echo ERROR: Failed to move chunked file
+        echo ERROR: Failed to move to raw folder.
         pause
         exit /b 1
     )
-    echo   [OK] Saved to: docs\chatlogs\chunked\%FILENAME%
-) else (
-    echo ERROR: Chunked file not found in output directory
-    pause
-    exit /b 1
+    echo   [OK] Saved to: docs\chatlogs\raw\%FILENAME%
 )
 
 REM ============================================================================
-REM STEP 4: Cleanup
+REM STEP 2: Send Atomic Copy to Chunker
 REM ============================================================================
 echo.
-echo [STEP 4/4] Cleaning up...
+echo [STEP 2/4] Sending atomic copy to chunker...
 
-REM Delete original file from Downloads (optional, comment out if you want to keep)
-REM del "%INPUT_FILE%" >nul 2>&1
+REM 1. Copy as .part (Watcher ignores this)
+copy /Y "%RAW_DIR%\%FILENAME%" "%CHUNKER_INPUT%\%FILENAME%.part" >nul
 
-echo   [OK] Process complete
+REM 2. Rename to final .md (Watcher sees ONE event)
+ren "%CHUNKER_INPUT%\%FILENAME%.part" "%FILENAME%"
+
+echo   Starting Watcher...
+start "Chunker Watcher" cmd /c "cd /d %CHUNKER_ROOT% && Start_Chunker_Watcher.bat"
+
+echo   [OK] File queued for processing
 
 REM ============================================================================
-REM SUMMARY
+REM STEP 3: Monitor for Output
 REM ============================================================================
+echo.
+echo [STEP 3/4] Waiting for processed files...
+echo   Target: %BASENAME%...
+
+set "TIMEOUT_COUNT=0"
+set "FOUND_PATH="
+
+:WAIT_FOR_CHUNK
+timeout /t 2 /nobreak >nul
+set /a TIMEOUT_COUNT+=1
+
+REM Debug ticker every 10 seconds
+set /a MOD_CHECK=%TIMEOUT_COUNT% %% 5
+if %MOD_CHECK%==0 echo   ...scanning (%TIMEOUT_COUNT%s)
+
+REM Look for a DIRECTORY containing the basename
+for /d %%D in ("%CHUNKER_OUTPUT%\*%BASENAME%*") do (
+    set "FOUND_PATH=%%D"
+    goto FILES_FOUND
+)
+
+REM Wait max 90 seconds
+if %TIMEOUT_COUNT% lss 45 goto WAIT_FOR_CHUNK
+
+echo.
+echo [ERROR] Chunking Timed Out
+echo The watcher may be busy or the file is very large.
+echo Please check: %CHUNKER_OUTPUT%
+pause
+exit /b 1
+
+:FILES_FOUND
+echo   [OK] Found output: %FOUND_PATH%
+
+REM ============================================================================
+REM STEP 4: Copy Output to Project
+REM ============================================================================
+echo.
+echo [STEP 4/4] Retrieving chunked files...
+
+if not exist "%CHUNKED_DIR%" mkdir "%CHUNKED_DIR%"
+timeout /t 1 /nobreak >nul
+
+REM Copy the results back to the project
+xcopy "%FOUND_PATH%" "%CHUNKED_DIR%\" /E /I /Y >nul
+
+if errorlevel 0 (
+    echo   [OK] Copied data to: docs\chatlogs\chunked\
+) else (
+    echo [WARNING] Copy might have failed.
+)
+
 echo.
 echo ============================================================================
 echo  PROCESSING COMPLETE
 echo ============================================================================
 echo.
-echo File: %FILENAME%
-echo.
-echo Locations:
-echo   Raw:     %RAW_DIR%\%FILENAME%
-echo   Chunked: %CHUNKED_DIR%\%FILENAME%
+echo Raw Source:  docs\chatlogs\raw\%FILENAME%
+echo Processed:   docs\chatlogs\chunked\%BASENAME%...
 echo.
 echo ============================================================================
 
-REM Success - auto-close after 3 seconds
-timeout /t 3 /nobreak >nul
+timeout /t 4 /nobreak >nul
 exit /b 0
-

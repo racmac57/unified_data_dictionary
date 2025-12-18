@@ -1,0 +1,726 @@
+echo Usage: Drag and drop a .md file onto this script
+    echo        OR: process_chatlog_portable.bat ^<filename.md^> [project_name]
+    pause
+    exit /b 1
+)
+
+set "FILENAME=%~1"
+set "BASENAME=%~n1"
+set "PROJECT_NAME=%~2"
+
+echo. echo ============================================================================
+echo  PORTABLE CHATLOG PROCESSOR v1.0
+echo ============================================================================
+echo. echo File: %FILENAME%
+echo. REM If project not specified, show menu
+if "%PROJECT_NAME%"=="" (
+    echo Select Project:
+    echo. echo 1. Unified Data Dictionary
+    echo 2. CAD Standards
+    echo 3. RMS Standards
+    echo 4. 00_dev General
+    echo 5. Other Custom Path
+    echo. set /p "CHOICE=Enter choice (1-5): "
+    
+    if "!CHOICE! "=="1" (
+        set "PROJECT_ROOT=%ONEDRIVE_ROOT%\09_Reference\Standards\unified_data_dictionary"
+        set "PROJECT_NAME=unified_data_dictionary"
+    ) else if "!CHOICE! "=="2" (
+        set "PROJECT_ROOT=%ONEDRIVE_ROOT%\09_Reference\Standards\CAD"
+        set "PROJECT_NAME=CAD"
+    ) else if "!CHOICE! "=="3" (
+        set "PROJECT_ROOT=%ONEDRIVE_ROOT%\09_Reference\Standards\RMS"
+        set "PROJECT_NAME=RMS"
+    ) else if "!CHOICE! "=="4" (
+        set "PROJECT_ROOT=%ONEDRIVE_ROOT%\00_dev"
+        set "PROJECT_NAME=00_dev"
+    ) else if "!CHOICE! "=="5" (
+        set /p "PROJECT_ROOT=Enter full project path: "
+        set /p "PROJECT_NAME=Enter project name: "
+    ) else (
+        echo Invalid choice
+        pause
+        exit /b 1
+    )
+) else (
+    REM Project specified via command line
+    set "PROJECT_ROOT=%ONEDRIVE_ROOT%\09_Reference\Standards\%PROJECT_NAME%"
+)
+
+echo. echo Project: !PROJECT_NAME! echo Path: !PROJECT_ROOT! echo. REM Set paths
+set "RAW_DIR=!PROJECT_ROOT!\docs\chatlogs\raw"
+set "CHUNKED_DIR=!PROJECT_ROOT!\docs\chatlogs\chunked"
+
+REM Check if chatlog structure exists
+if not exist "!RAW_DIR!" (
+    echo WARNING: Chatlog structure not found! echo Creating: !RAW_DIR! mkdir "!RAW_DIR!" 2>nul
+)
+
+if not exist "!CHUNKED_DIR!" (
+    echo Creating: !CHUNKED_DIR! mkdir "!CHUNKED_DIR!" 2>nul
+)
+
+REM Step 1: Move to raw directory
+echo [1/5] Moving chatlog to raw directory...
+if exist "%FILENAME%" (
+    move /Y "%FILENAME%" "!RAW_DIR!\" >nul 2>&1
+    if !errorlevel! equ 0 (
+        echo   [OK] Moved to: !RAW_DIR!\%~nx1
+    ) else (
+        echo   [ERROR] Failed to move file
+        pause
+        exit /b 1
+    )
+) else (
+    echo   [ERROR] File not found: %FILENAME%
+    pause
+    exit /b 1
+)
+
+REM Step 2: Run Chunker
+echo. echo [2/5] Running chunker...
+if exist "%CHUNKER_DIR%" (
+    cd /d "%CHUNKER_DIR%"
+    call Chunker_Move.bat "!RAW_DIR!\%~nx1"
+    echo   [OK] Chunker started
+) else (
+    echo   [WARNING] Chunker not found at: %CHUNKER_DIR%
+    echo   Skipping chunking step
+)
+
+REM Step 3: Start watcher
+echo. echo [3/5] Starting chunker watcher...
+if exist "%CHUNKER_DIR%\Start_Chunker_Watcher.bat" (
+    start "Chunker Watcher" cmd /c "cd /d %CHUNKER_DIR% && Start_Chunker_Watcher.bat"
+    echo   [OK] Watcher started in new window
+) else (
+    echo   [WARNING] Watcher script not found
+)
+
+REM Step 4: Monitor output directory
+echo. echo [4/5] Monitoring output directory...
+echo   Waiting for chunked files to appear...
+set TIMEOUT=60
+set COUNT=0
+
+:WAIT_LOOP
+timeout /t 2 /nobreak >nul
+set /a COUNT+=2
+
+REM Check if chunked files exist
+if exist "%OUTPUT_DIR%\%BASENAME%*.md" (
+    echo   [OK] Chunked files detected! goto COPY_FILES
+)
+
+if %COUNT% geq %TIMEOUT% (
+    echo   [WARNING] Timeout reached. Files may still be processing. echo   Check: %OUTPUT_DIR%
+    goto COPY_FILES
+)
+
+goto WAIT_LOOP
+
+:COPY_FILES
+REM Step 5: Copy chunked files
+echo. echo [5/5] Copying chunked files...
+xcopy /Y "%OUTPUT_DIR%\%BASENAME%*.md" "!CHUNKED_DIR!\" >nul 2>&1
+if !errorlevel! equ 0 (
+    echo   [OK] Chunked files copied to: !CHUNKED_DIR! REM List copied files
+    echo. echo Files created:
+    dir /B "!CHUNKED_DIR!\%BASENAME%*.md" 2>nul
+) else (
+    echo   [INFO] No chunked files found yet
+    echo   They may appear later in: !CHUNKED_DIR!
+) echo. echo ============================================================================
+echo  PROCESSING COMPLETE
+echo ============================================================================
+echo. echo Project:         !PROJECT_NAME! echo Raw chatlog:     !RAW_DIR!\%~nx1
+echo Chunked files:   !CHUNKED_DIR!\%BASENAME%_*.md
+echo Output monitor:  %OUTPUT_DIR%
+echo. echo ============================================================================
+
+pause
+
+```
+
+Now let me create an automated cleanup script:
+
+```bat
+@echo off
+REM ============================================================================
+REM CLEANUP_SCRIPT.bat - Automated 00_dev Directory Cleanup
+REM ============================================================================
+REM Version: 1.0
+REM Date: 2025-12-17
+REM Author: R. A. Carucci
+REM ============================================================================
+REM This script organizes the cluttered 00_dev root directory by:
+REM   1. Creating archive structure
+REM   2. Moving old files to appropriate archive folders
+REM   3. Deleting junk/temp files
+REM   4. Moving scripts to proper locations
+REM ============================================================================
+
+setlocal enabledelayedexpansion
+
+set "ROOT=C:\Users\carucci_r\OneDrive - City of Hackensack\00_dev"
+
+echo. echo ============================================================================
+echo  00_dev DIRECTORY CLEANUP
+echo ============================================================================
+echo. echo This will organize your cluttered 00_dev directory. echo. echo What will happen:
+echo   - Create archive/ structure
+echo   - Move old chatlogs to archive/chatlogs/
+echo   - Move phase files to archive/phases/
+echo   - Move temp files to archive/temp/
+echo   - Delete __pycache__ and junk files
+echo   - Move loose scripts to scripts/utilities/
+echo. echo Root directory will go from 50+ items to 8 items. echo. set /p "CONFIRM=Continue? (Y/N): "
+
+if /i not "%CONFIRM%"=="Y" (
+    echo Cancelled. exit /b 0
+)
+
+cd /d "%ROOT%"
+
+echo. echo ============================================================================
+echo  PHASE 1: Create Archive Structure
+echo ============================================================================
+echo. echo Creating archive directories...
+mkdir "archive" 2>nul
+mkdir "archive\chatlogs" 2>nul
+mkdir "archive\phases" 2>nul
+mkdir "archive\inventories" 2>nul
+mkdir "archive\notes" 2>nul
+mkdir "archive\temp" 2>nul
+mkdir "archive\old_backups" 2>nul
+mkdir "archive\directory_trees" 2>nul
+echo [OK] Archive structure created
+
+echo. echo ============================================================================
+echo  PHASE 2: Move Chatlogs
+echo ============================================================================
+echo. echo Moving chatlog files...
+for %%f in (2025_*.md *cursor*.md *claude*.md) do (
+    if exist "%%f" (
+        move /Y "%%f" "archive\chatlogs\" >nul 2>&1
+        echo   [OK] %%f
+    )
+)
+
+if exist "chunk_sum_claude_cursor_chats" (
+    move /Y "chunk_sum_claude_cursor_chats" "archive\chatlogs\" >nul 2>&1
+    echo   [OK] chunk_sum_claude_cursor_chats/
+)
+
+echo. echo ============================================================================
+echo  PHASE 3: Move Phase Files
+echo ============================================================================
+echo. echo Moving phase files...
+for %%f in (Phase*.md phase*.md PHASE*.ps1 final_phase_verified.txt) do (
+    if exist "%%f" (
+        move /Y "%%f" "archive\phases\" >nul 2>&1
+        echo   [OK] %%f
+    )
+)
+
+echo. echo ============================================================================
+echo  PHASE 4: Move Inventories & Directory Trees
+echo ============================================================================
+echo. echo Moving inventory files...
+for %%f in (*INVENTORY*.csv *INVENTORY*.ps1) do (
+    if exist "%%f" (
+        move /Y "%%f" "archive\inventories\" >nul 2>&1
+        echo   [OK] %%f
+    )
+)
+
+echo Moving directory tree files...
+for %%f in (directory_tree. * *directory_tree. * tree_report_error.log) do (
+    if exist "%%f" (
+        move /Y "%%f" "archive\directory_trees\" >nul 2>&1
+        echo   [OK] %%f
+    )
+)
+
+echo. echo ============================================================================
+echo  PHASE 5: Move Notes
+echo ============================================================================
+echo. echo Moving note files...
+for %%f in (Note*.txt optional_key_files.md unified_system.md) do (
+    if exist "%%f" (
+        move /Y "%%f" "archive\notes\" >nul 2>&1
+        echo   [OK] %%f
+    )
+)
+
+echo. echo ============================================================================
+echo  PHASE 6: Move Temp/Test Files
+echo ============================================================================
+echo. echo Moving temp folders...
+for %%d in (_chunker_release_tmp _chunker_release_tmp_origin.git test_extraction extracted_files project_compare_*) do (
+    if exist "%%d" (
+        move /Y "%%d" "archive\temp\" >nul 2>&1
+        echo   [OK] %%d/
+    )
+)
+
+if exist "test_blocks_export.csv" (
+    move /Y "test_blocks_export.csv" "archive\temp\" >nul 2>&1
+    echo   [OK] test_blocks_export.csv
+)
+
+echo. echo ============================================================================
+echo  PHASE 7: Move Old Backups
+echo ============================================================================
+echo. echo Moving backup folders...
+for %%d in (chunker_backup_* nppBackup) do (
+    if exist "%%d" (
+        move /Y "%%d" "archive\old_backups\" >nul 2>&1
+        echo   [OK] %%d/
+    )
+)
+
+echo. echo ============================================================================
+echo  PHASE 8: Delete Junk Files
+echo ============================================================================
+echo. echo Deleting __pycache__...
+if exist "__pycache__" (
+    rmdir /S /Q "__pycache__" 2>nul
+    echo   [OK] __pycache__/ deleted
+)
+
+echo Deleting junk files...
+for %%f in (- City of files.zip) do (
+    if exist "%%f" (
+        del /F /Q "%%f" 2>nul
+        echo   [OK] %%f deleted
+    )
+)
+
+echo. echo ============================================================================
+echo  PHASE 9: Move Loose Scripts
+echo ============================================================================
+echo. echo Moving PowerShell scripts...
+for %%f in (*.ps1) do (
+    if not "%%f"=="CLEANUP_SCRIPT.bat" (
+        if exist "%%f" (
+            move /Y "%%f" "scripts\utilities\" >nul 2>&1
+            echo   [OK] %%f → scripts\utilities\
+        )
+    )
+)
+
+echo Moving Python scripts...
+for %%f in (code_block_extractor.py folder_structure_dev_python.py kb_*.py print_tree.py) do (
+    if exist "%%f" (
+        move /Y "%%f" "scripts\utilities\" >nul 2>&1
+        echo   [OK] %%f → scripts\utilities\
+    )
+)
+
+echo. echo ============================================================================
+echo  PHASE 10: Move Project Folders
+echo ============================================================================
+echo. echo Moving project folders...
+for %%d in (folder_merger PowerBI_Date) do (
+    if exist "%%d" (
+        if not exist "projects" mkdir "projects"
+        move /Y "%%d" "projects\" >nul 2>&1
+        echo   [OK] %%d/ → projects\
+    )
+)
+
+echo. echo ============================================================================
+echo  CLEANUP COMPLETE! echo ============================================================================
+echo. REM Count remaining items in root
+set COUNT=0
+for /f %%a in ('dir /b /a-s 2^>nul ^| find /c /v ""') do set COUNT=%%a
+
+echo Root directory now has: %COUNT% items
+echo. echo Items in root:
+dir /b /a-d
+echo. echo Folders in root:
+dir /b /ad
+echo. echo ============================================================================
+echo. echo Next steps:
+echo   1. Review archive/ folders to ensure nothing important was missed
+echo   2. Create README.md for the root directory
+echo   3. Delete CLEANUP_SCRIPT.bat and CLEANUP_PLAN.md (no longer needed)
+echo. echo ============================================================================
+
+pause
+
+```
+
+Now let me update the utilities README to document the new chatlog script:
+
+```markdown
+# Utilities
+
+General-purpose helper scripts and utilities. ## Purpose
+
+This folder contains utilities for:
+- Helper functions
+- Common operations
+- System utilities
+- Quick tools
+- Miscellaneous helpers
+
+## Available Scripts
+
+### **process_chatlog_portable.bat** ⭐
+**Purpose**: Portable chatlog processor for ANY project  
+**Version**: 1.0  
+**Usage**: Drag & drop .md file onto script  
+
+**Features**:
+- Works with any project that has `docs/chatlogs/` structure
+- Auto-detects project location
+- Interactive menu for project selection
+- Automatically runs chunker
+- Copies chunked files to project
+
+**Example**:
+```batch
+# Drag & drop usage
+1. Export chatlog from AI (Claude/ChatGPT)
+2. Drag .md file onto process_chatlog_portable.bat
+3. Select project from menu
+4. Done! File processed and organized
+
+# Command line usage
+process_chatlog_portable.bat "My_Chat.md" unified_data_dictionary
+```
+
+**Supported Projects**:
+- Unified Data Dictionary
+- CAD Standards
+- RMS Standards
+- 00_dev General
+- Custom paths (user-specified)
+
+---
+
+### **Coming Soon**
+More utility scripts will be added here
+
+## Example Use Cases
+
+- String manipulation
+- Date/time utilities
+- Quick calculations
+- System information
+- Common operations
+
+---
+
+**Add your utility scripts to this folder**
+
+
+```
+
+Now let me create a summary document:
+
+```markdown
+# ✅ 00_dev Cleanup & Portable Script Setup
+
+**Date**: December 17, 2025  
+**Status**: Ready to Execute
+
+---
+
+## 🎯 What Was Created
+
+### **1. Portable Chatlog Processor** ⭐
+**Location**: `scripts/utilities/process_chatlog_portable.bat`
+
+**Features**:
+- ✅ Works with ANY project (not just one)
+- ✅ Interactive menu to select project
+- ✅ Auto-creates chatlog structure if missing
+- ✅ Drag & drop interface
+- ✅ Synced via OneDrive (works on laptop & desktop)
+- ✅ Handles chunking automatically
+
+**Usage**:
+1. Export chatlog from AI
+2. Drag .md file onto `process_chatlog_portable.bat`
+3. Select project from menu
+4. Done! ### **2. Cleanup Plan**
+**Location**: `CLEANUP_PLAN.md`
+
+Detailed analysis showing:
+- What's cluttering the root (50+ items)
+- Where each item should go
+- Archive structure design
+- Safety considerations
+
+### **3. Automated Cleanup Script**
+**Location**: `CLEANUP_SCRIPT.bat`
+
+Fully automated cleanup that:
+- Creates archive structure
+- Moves chatlogs to `archive/chatlogs/`
+- Moves phase files to `archive/phases/`
+- Moves temp files to `archive/temp/`
+- Deletes junk (__pycache__, corrupted files)
+- Moves loose scripts to `scripts/utilities/`
+- Reduces root from 50+ items to 8 items
+
+---
+
+## 📁 Target Structure After Cleanup
+
+```
+00_dev/
+├── 00_dev.code-workspace          ← VS Code workspace
+├── README.md                      ← To be created
+├── CHANGELOG.md                   ← To be created
+│
+├── archive/                       ← All old content
+│   ├── chatlogs/
+│   ├── phases/
+│   ├── inventories/
+│   ├── notes/
+│   ├── temp/
+│   ├── old_backups/
+│   └── directory_trees/
+│
+├── projects/                      ← Active projects
+├── scripts/                       ← Your scripts ✅
+│   └── utilities/
+│       └── process_chatlog_portable.bat  ⭐ NEW! │
+├── tools/                         ← Utility tools
+└── directory_opus/                ← DOpus customizations
+```
+
+**Root**: 3 files + 5 folders = 8 items (vs current 50+)
+
+---
+
+## 🚀 How to Use the Portable Script
+
+### **Scenario 1: Unified Data Dictionary**
+
+```
+1. Export chat as: "CLI_Implementation_Session.md"
+2. Drag onto: process_chatlog_portable.bat
+3. Select: "1. Unified Data Dictionary"
+4. Result: 
+   - Raw: unified_data_dictionary/docs/chatlogs/raw/
+   - Chunked: unified_data_dictionary/docs/chatlogs/chunked/
+```
+
+### **Scenario 2: CAD Standards**
+
+```
+1. Export chat as: "CAD_Schema_Updates.md"
+2. Drag onto: process_chatlog_portable.bat
+3. Select: "2. CAD Standards"
+4. Result:
+   - Raw: CAD/docs/chatlogs/raw/
+   - Chunked: CAD/docs/chatlogs/chunked/
+```
+
+### **Scenario 3: General 00_dev**
+
+```
+1. Export chat as: "Script_Organization_Discussion.md"
+2. Drag onto: process_chatlog_portable.bat
+3. Select: "4. 00_dev General"
+4. Result:
+   - Raw: 00_dev/docs/chatlogs/raw/
+   - Chunked: 00_dev/docs/chatlogs/chunked/
+```
+
+### **Scenario 4: Custom Project**
+
+```
+1. Export chat as: "Custom_Project_Notes.md"
+2. Drag onto: process_chatlog_portable.bat
+3. Select: "5. Other Custom Path"
+4. Enter full path: C:\path\to\project
+5. Enter project name: MyProject
+6. Result:
+   - Raw: MyProject/docs/chatlogs/raw/
+   - Chunked: MyProject/docs/chatlogs/chunked/
+```
+
+---
+
+## 🧹 How to Run the Cleanup
+
+### **Option 1: Automated (Recommended)**
+
+```batch
+# Navigate to 00_dev
+cd "C:\Users\carucci_r\OneDrive - City of Hackensack\00_dev"
+
+# Run cleanup script
+CLEANUP_SCRIPT.bat
+
+# Follow prompts
+# Review results
+```
+
+### **Option 2: Manual Review First**
+
+1. Read `CLEANUP_PLAN.md` thoroughly
+2. Verify you agree with what goes where
+3. Manually move a few items to test
+4. Run `CLEANUP_SCRIPT.bat` for the rest
+
+### **Option 3: Selective Cleanup**
+
+Pick specific phases from `CLEANUP_SCRIPT.bat`:
+- Phase 2: Move chatlogs only
+- Phase 3: Move phase files only
+- Phase 8: Delete junk only
+- etc. ---
+
+## 📋 Cleanup Checklist
+
+**Before Running**:
+- [ ] Review CLEANUP_PLAN.md
+- [ ] Understand what will be archived
+- [ ] Close any programs using files in 00_dev
+- [ ] Make mental note of any critical files
+
+**Run Cleanup**:
+- [ ] Execute CLEANUP_SCRIPT.bat
+- [ ] Confirm at prompt
+- [ ] Wait for completion (~30 seconds)
+- [ ] Review summary
+
+**After Cleanup**:
+- [ ] Verify root has ~8 items
+- [ ] Check archive/ folders for your files
+- [ ] Confirm scripts moved to scripts/utilities/
+- [ ] Test that you can still access needed files
+- [ ] Create README.md for root directory
+- [ ] Delete CLEANUP_SCRIPT.bat & CLEANUP_PLAN.md (optional)
+
+---
+
+## 🎨 Benefits
+
+### **Portable Script Benefits**:
+1. ✅ **One Script, All Projects** - Use same script everywhere
+2. ✅ **OneDrive Synced** - Available on laptop & desktop
+3. ✅ **Auto-Detection** - Finds project locations automatically
+4. ✅ **Flexible** - Works with any project structure
+5. ✅ **Future-Proof** - Add new projects to menu easily
+
+### **Cleanup Benefits**:
+1. ✅ **Organized** - Everything in proper place
+2. ✅ **Findable** - Know where to look for files
+3. ✅ **Professional** - Clean, maintainable structure
+4. ✅ **Archived** - Old content preserved, not deleted
+5. ✅ **Reversible** - Can restore from archive if needed
+
+---
+
+## 📊 Before & After Comparison
+
+### **Before** (Cluttered):
+```
+00_dev/
+├── __pycache__/
+├── _chunker_release_tmp/
+├── 50+ random files
+├── Old chatlogs everywhere
+├── Phase files scattered
+├── Temp folders mixed in
+├── Scripts in wrong place
+└── Hard to find anything
+```
+
+### **After** (Clean):
+```
+00_dev/
+├── 00_dev.code-workspace
+├── README.md
+├── CHANGELOG.md
+├── archive/                     ← Everything organized
+├── projects/                    ← Clear project structure
+├── scripts/                     ← Proper script organization
+│   └── utilities/
+│       └── process_chatlog_portable.bat  ⭐
+├── tools/
+└── directory_opus/
+```
+
+---
+
+## 🔗 Related Files
+
+**In Unified Data Dictionary**:
+- `docs/chatlogs/README.md` - Project-specific chatlog guide
+- `docs/TEXTEXPANDER_WORKFLOWS.md` - TextExpander snippets
+- `scripts/quick_process_chatlog.bat` - Project-specific version
+
+**In 00_dev**:
+- `CLEANUP_PLAN.md` - Detailed cleanup analysis
+- `CLEANUP_SCRIPT.bat` - Automated cleanup
+- `scripts/utilities/process_chatlog_portable.bat` - Portable processor
+- `scripts/utilities/README.md` - Utilities documentation
+
+---
+
+## ⚡ Quick Start Commands
+
+### **Test Portable Script**:
+```batch
+# From anywhere:
+cd "C:\Users\carucci_r\OneDrive - City of Hackensack\00_dev\scripts\utilities"
+
+# Drag a .md file onto process_chatlog_portable.bat
+```
+
+### **Run Cleanup**:
+```batch
+cd "C:\Users\carucci_r\OneDrive - City of Hackensack\00_dev"
+CLEANUP_SCRIPT.bat
+```
+
+### **Verify Results**:
+```batch
+# Count items in root
+dir /b | find /c /v ""
+
+# Should show ~8 items
+```
+
+---
+
+## 💡 Pro Tips
+
+### **For Portable Script**:
+1. **Pin to Taskbar** - Right-click → Pin for quick access
+2. **Desktop Shortcut** - Create shortcut for easy drag & drop
+3. **DOpus Button** - Add as DOpus toolbar button
+4. **Add to PATH** - Access from anywhere
+
+### **For Cleanup**:
+1. **Review First** - Read CLEANUP_PLAN.md before running
+2. **Test Archive** - Make sure you can access archived files
+3. **Document** - Create README.md after cleanup
+4. **Maintain** - Keep root clean going forward
+
+---
+
+## 🎯 Next Steps
+
+### **Immediate**:
+1. **Test Portable Script**:
+   - Export a test chatlog
+   - Drag onto process_chatlog_portable.bat
+   - Verify it works
+
+2. **Review Cleanup Plan**:
+   - Read CLEANUP_PLAN.md
+   - Identify any files you're unsure about
+   - Ask questions if needed
+
+### **This Week**:
+3.

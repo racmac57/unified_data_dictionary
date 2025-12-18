@@ -9,12 +9,51 @@
 | Info | Value |
 |------|-------|
 | **Project** | Unified Data Dictionary |
-| **Version** | 0.2.0 |
+| **Version** | 0.2.1 |
 | **Status** | ✅ Active Development |
 | **Repository** | https://github.com/racmac57/unified_data_dictionary |
 | **License** | MIT |
-| **Last Updated** | 2025-12-17 |
+| **Last Updated** | 2025-12-18 |
 
+---
+
+## 🎯 Purpose
+
+Unified schema management and field mapping system for CAD/RMS/DV systems.
+
+**Core Functions**:
+- Extract schemas from source repositories
+- Define canonical data model (single source of truth)
+- Map fields bidirectionally (CAD ↔ RMS)
+- **New**: Automated cleanup of redundant output data
+
+---
+
+## 🚀 Recent Milestones
+
+### **v0.2.1** (Current):
+- ✅ **Maintenance**: Successfully executed `cleanup_duplicates.ps1`.
+- ✅ **Optimization**: Reduced `KB_Shared` file count by ~6,000 files.
+- ✅ **Verification**: Validated integrity of backups to `_Sandbox`.
+
+### **v0.2.0**:
+- ✅ Enhanced folder structure (templates, data, examples).
+- ✅ Root directory organization.
+
+---
+
+## 📂 Quick Structure
+
+
+```
+unified_data_dictionary/
+├── 📄 Root (9 config files)
+│   ├── README.md              → Project overview
+│   ├── SUMMARY.md             → This file
+│   ├── CHANGELOG.md           → Version history
+│   └── ...
+
+```
 ---
 
 ## 🎯 Purpose

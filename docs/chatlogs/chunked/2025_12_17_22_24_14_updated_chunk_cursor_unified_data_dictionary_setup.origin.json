@@ -1,0 +1,49 @@
+{
+  "tags": [
+    "API",
+    "ai",
+    "code",
+    "config",
+    "data",
+    "docs",
+    "excel",
+    "function",
+    "input/output",
+    "it-ops",
+    "json",
+    "legal",
+    "loop",
+    "markdown",
+    "police",
+    "powershell",
+    "python",
+    "regex",
+    "sql",
+    "training",
+    "api"
+  ],
+  "metadata_enrichment": {
+    "metadata": {
+      "project_name": "02_data",
+      "source_type": "documentation",
+      "language": "en",
+      "department": "admin",
+      "key_terms": [
+        "echo",
+        "files",
+        "docs",
+        "scripts",
+        "git",
+        "click"
+      ],
+      "enrichment_version": "1.0.0"
+    },
+    "summaries": {
+      "file_summary": "# Unified data dictionary setup\n_Exported on 12/17/2025 at 22:23:07 EST from Cursor (2.2.20)_\n\n---\n\n**User**\n\nClaude AI provided the following, I have the scaffolding but have to move the files from C:\\Users\\carucci_r\\Downloads to the co...",
+      "first_line": "# Unified data dictionary setup"
+    },
+    "enrichment_version": "1.0.0"
+  },
+  "last_processed_at": "2025-12-17T22:24:15.790363",
+  "department": "admin"
+}
