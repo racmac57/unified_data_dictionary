@@ -17,26 +17,35 @@ chatlogs/
 
 ## 🚀 Quick Workflow
 
-### **Method 1: Automated (Recommended)**
+> **📖 Complete Guide**: See `docs/workflows/Chatlog_Processing_Workflow.md` for detailed workflow documentation
 
-1. **Export chat** from AI with filename from prompt
-2. **Drag & drop** the .md file onto:
-   ```
-   scripts\quick_process_chatlog.bat
-   ```
-3. **Done!** File is automatically:
+### **Method 1: DOpus Button** (⭐ FASTEST - Recommended)
+
+1. **Export chat** from AI with filename from `glog`
+2. **Select file** in DOpus
+3. **Click** "Process UDD Chatlog" button
+4. **Done!** File is automatically:
    - Moved to `raw/`
    - Chunked via C:\_chunker
    - Output appears in `chunked/`
 
-### **Method 2: Manual Process**
+**Setup**: Import `scripts/DOpus_Process_UDD_Chatlog_Button.dcf` once
 
-1. Export chat and save to `raw/` folder
-2. Run chunker manually:
-   ```batch
-   scripts\process_chatlog.bat filename.md
+### **Method 2: Drag & Drop** (Fast)
+
+1. **Export chat** from AI with filename from `glog`
+2. **Drag & drop** the .md file onto:
    ```
-3. Chunked files appear in `chunked/`
+   scripts\Process_UDD_Chatlog.bat
+   ```
+3. **Done!** (same automation as Method 1)
+
+### **Method 3: Portable Processor** (Multi-Project)
+
+1. **Run**: `process_chatlog_portable.bat`
+2. **Select**: unified_data_dictionary from menu
+3. **Enter**: path to chatlog file
+4. **Done!** (same automation)
 
 ---
 
